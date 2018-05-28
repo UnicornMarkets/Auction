@@ -1,0 +1,123 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN"
+"http://www.w3.org/TR/html4/strict.dtd">
+<title>
+      Auction Extension User Manual
+    </title>
+    <link rel="stylesheet" href="netlogo.css" type="text/css">
+    <style type="text/css">
+p { margin-left: 1.5em ; }
+    h3 { font-size: 115% ; }
+    h4 { font-size: 100% ; margin-left: 1.5em ; background: white ; }
+    </style>
+    <meta http-equiv="Content-Type" content="text/html; charset=us-ascii">
+  <h1>
+      Auction Extension
+    </h1>
+    <p>
+        The auction extension allows the entering of trading orders that are executed in discrete time.
+
+        The order matching mechanism fills as many crossing orders as possible at a single price when the market clears
+
+        Users have the option to view the last traded price and volume through a reporter. No traders' orders are matched 1 to 1
+    <h2>
+      How to use
+    </h2>
+    <p>
+     To use the auction Extension in your model, add a line to the top of your procedures tab:
+    <pre>
+extensions [ auction ]
+</pre>
+    <p>
+    For the most basic usage, issue bids and asks from traders with the commands:
+<pre>
+  auction:buy trader market price size
+  auction:sell trader market price size
+</pre>
+    For more information on using Netlogo extensions, see the <a href="extensions.html">Extensions Guide</a>.
+    <h2>
+      auction extension Primitives
+    </h2>
+    <h3>
+      Execute
+    </h3>
+    <p>
+      <a href="#auction:setup-market">auction:setup-market</a>
+      <a href="#auction:buy">auction:buy</a>
+      <a href="#auction:sell">auction:sell</a>
+      <a href="#auction:clear">auction:clear</a>
+    <h3>
+      Report
+    </h3>
+    <p>
+      <a href="#auction:last-trade">auction:last-trade</a>
+
+      <h2>
+        Execute
+      </h2>
+    <div class="dict_entry">
+      <h3>
+        <a name="auction:setup-market" id=
+        "auction:setup-market">auction:setup-market</a>
+      </h3>
+      <h4>
+        auction:setup-market <i>asset-name</i>
+      </h4>
+      <p>
+        Adds a single market to the simulation for a certain type of asset
+      </div>
+    <div class="dict_entry">
+      <h3>
+        <a name="auction:buy" id=
+        "auction:buy">auction:buy</a>
+      </h3>
+      <h4>
+        auction:buy <i>turtle</i> <i>market-type</i> <i>price</i> <i>size</i>
+      </h4>
+      <p>
+        Place a buy order in the market. Takes a turtle trading agent, a market type a price and size for the order
+
+        Will remove cash at price * quantity for buy after placing and before clearing
+      </div>
+    <div class="dict_entry">
+      <h3>
+        <a name="auction:sell" id=
+        "auction:sell">auction:sell</a>
+      </h3>
+      <h4>
+        auction:sell <i>turtle</i> <i>market-type</i> <i>price</i> <i>size</i>
+      </h4>
+      <p>
+        Place a sell order in the market. Takes a turtle trading agent, a market type a price and size for the order
+
+        Will remove assets at the quantity of sell after placing and before clearing
+      </div>
+      <div class="dict_entry">
+      <h3>
+        <a name="auction:clear" id="auction:clear">auction:clear</a>
+      </h3>
+      <h4>
+        auction:clear <i>market-type</i>
+      </h4>
+      <p>
+        clears the auction of all orders and fills the standing orders crossing the price threshold
+      </div>
+
+    <h2>
+      Report
+    </h2>
+    <div class="dict_entry">
+      <h3>
+        <a name="auction:last-trade" id="auction:last-trade">auction:last-trade</a>
+      </h3>
+      <h4>
+        auction:last-trade <i>market-type</i>
+      </h4>
+      <p>
+        returns the last trade price and volume in a market
+      </div>
+
+    <h2>
+      Credits:
+    </h2>
+    <p>
+	 Under construction

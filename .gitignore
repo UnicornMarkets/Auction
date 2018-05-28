@@ -1,0 +1,6 @@
+/bin/sbt-launch-*.jar
+/project
+/target
+/auction.jar
+/auction.jar.pack.gz
+/auction.zip
