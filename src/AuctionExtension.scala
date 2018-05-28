@@ -32,7 +32,7 @@ class AuctionExtension extends api.DefaultClassManager {
   }
 }
 
-object Market(asset: String, context: api.Context) extends agent.Turtle {
+class Market(asset: String, context: api.Context) extends agent.Turtle {
   /* Market is an agent that has methods for handling orders
    * we use a HashMap so we can do incremental updates with repeating prices
    * we should only have a single price key with size to find the fill price
