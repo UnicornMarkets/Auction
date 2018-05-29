@@ -1,6 +1,7 @@
 package org.nlogo.auction
 
-import org.nlogo.{ agent, api, nvm }
+import org.nlogo.agent
+import org.nlogo.api
 import api.Syntax._
 import api.ScalaConversions._  // implicits
 import scala.collection.mutable.HashMap
@@ -40,9 +41,9 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
 
   setTurtleVariable(this, "asset", asset)
   val agentManager = new agent.AgentManagement()
-
+  // lastTrade gets saved before clearing lastTradePrice and lastTradeVolume
+  var lastTrade = Nil
   // initializes empty HashMaps for bids/asks
-
   var bidHash = new HashMap[Int, Int]()
   var askHash = new HashMap[Int, Int]()
   // clear all orders with empty list
@@ -114,24 +115,34 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
     val size = pss._2
     val side = pss._3
 
+    // this is the trade price during the clearing event
+    lastTradePrice = price
+
+    // if there is a partial fill (most often), we will fill asymmetrically
     if side != None {
       fillPartial(price, size, side)
       if side == "bid" {
+        // the bid is partially filled at the trade price
         val fillBids = bidOrders.filter(_._1 > price)
         val fillAsks = askOrders.filter(_._1 <= price)
       }
       else if side == "ask" {
+        // the ask is partially filled at the trade price
         val fillBids = bidOrders.filter(_._1 >= price)
         val fillAsks = askOrders.filter(_._1 < price)
       }
     }
     else {
+      // all orders are entirely filled at the trade price
       val fillBids = bidOrders.filter(_._1 >= price)
       val fillAsks = askOrders.filter(_._1 <= price)
     }
 
     fillBids.map(order => fillOrderBid(order, price))
     fillAsks.map(order => fillOrderAsk(order, price))
+
+    // lastTradeVolume has been updated with partial fills.
+    lastTradeVolume = lastTradeVolume + fillBids.map(_._2).sum + fillAsks.map(_._2).sum
   }
 
   def fillPartial(price: Int, size: Int, side: String): Unit = {
@@ -157,6 +168,7 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
                                       proportionateFills(gapFillIdx) + sizeGap)
       val bidOrdersFills = (partFillBids zip finalFills)
       bidOrdersFills.map{ case (o, f) => fillOrderPartialBid(o, f) }
+
       }
     if side == "ask" {
       val partFillAsks = askOrders.filter(_._1 == price)
@@ -177,6 +189,8 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
       val askOrdersFills = (partFillAsks zip finalFills)
       askOrdersFills.map{ case (o, f) => fillOrderPartialAsks(o, f) }
      }
+     // lastTradeVolume should be zero before this
+     lastTradeVolume = totalToFill
 
   }
 
@@ -305,7 +319,7 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
   def resetAllOrders(): Unit = {
 
     // save last trade before resetting it
-    var this.lastTrade = List(lastTradePrice, lastTradeVolume)
+    lastTrade = List(lastTradePrice, lastTradeVolume)
 
     // clear all price -> size by creating a new HashMap
     bidHash = new HashMap[Int, Int]()
@@ -336,7 +350,7 @@ object SetupMarket extends api.Command {
   // initializes the agent with the asset type and class type
   override def getSyntax = reporterSyntax(right = List(StringType))
   def peform(Array[api.Argument], context: api.Context) {
-    // this method should be called with just the asset name
+    // this method should be called once with just the asset name (args(0))
     val market = new Market(args(0))
     // TODO: create a turtle here that is a market
 
