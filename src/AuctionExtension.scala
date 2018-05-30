@@ -1,57 +1,76 @@
 package org.nlogo.auction
 
-import org.nlogo.agent
-import org.nlogo.api
-import api.Syntax._
+import org.nlogo.api.ExtensionException
+import org.nlogo.{agent, api, core, nvm}
+// import api.Syntax._
 import api.ScalaConversions._  // implicits
 import scala.collection.mutable.HashMap
-import scala.utils.Random
-
-def setTurtleVariable(turtle: agent.Turtle, varName: String, value: AnyRef): Unit = {
-  /* Sets the turtles variables by names, looking at breeds first then all turtles
-   * finds the index to handle the string
-   */
-  var vn = turtle.world.breedsOwnIndexOf(varName)
-  if (vn < 0) {
-    var vn = turtle.world.turtlesOwnIndexOf(varName)
-  }
-  if (vn >= 0) {
-    turtle.setTurtleVariable(vn, value)
-  } else {
-    throw new ExtensionException(I18N.errors.get("org.nlogo.agent.Agent.breedDoesNotOwnVariable",
-                                                  turtle.toString(), varName))
-  }
-}
+import scala.util.Random
 
 class AuctionExtension extends api.DefaultClassManager {
+
   def load(manager: api.PrimitiveManager) {
+    // manager.addPrimitive("markets", ReportMarkets)
     manager.addPrimitive("setup-market", SetupMarket)
     manager.addPrimitive("buy", Buyer)
     manager.addPrimitive("sell", Seller)
-    manager.addPrimitive("clear", Clearing)
+    manager.addPrimitive("clear", Clear)
     manager.addPrimitive("last-trade", LastTradeReporter)
   }
 }
 
-class Market(asset: String, context: api.Context) extends agent.Turtle {
+class Market(asset: String, context: api.Context) extends agent.CoreWorld with agent.AgentManagement {
   /* Market is an agent that has methods for handling orders
    * we use a HashMap so we can do incremental updates with repeating prices
    * we should only have a single price key with size to find the fill price
    */
 
-  setTurtleVariable(this, "asset", asset)
-  val agentManager = new agent.AgentManagement()
-  // lastTrade gets saved before clearing lastTradePrice and lastTradeVolume
-  var lastTrade = Nil
+  // agent.AgentManagement gives direct access to turtles by who numbers
+
   // initializes empty HashMaps for bids/asks
   var bidHash = new HashMap[Int, Int]()
   var askHash = new HashMap[Int, Int]()
   // clear all orders with empty list
-  var bidOrders = Nil
-  var askOrders = Nil
+  var bidOrders = List[(Int, Int, Int)]()
+  var askOrders = List[(Int, Int, Int)]()
   // with each clear, calculate a volume and take the price for last trade
   var lastTradePrice = 0
   var lastTradeVolume = 0
+
+  // this method is for transactions with turtles
+
+  def setTurtleVariable(turtle: agent.Turtle, varName: String, value: Int): Unit = {
+    /* Sets the turtles variables by names, looking at breeds first then all turtles
+     * finds the index to handle the string
+     */
+    var vn = turtle.world.breedsOwnIndexOf(turtle.getBreed(), varName)
+    if (vn < 0) {
+      var vn = turtle.world.turtlesOwnIndexOf(varName)
+    }
+    if (vn >= 0) {
+      turtle.setTurtleVariable(vn, value)
+    } else {
+      throw new api.ExtensionException("variable not present for turtle to set")
+    }
+  }
+
+  def getTurtleVariable(turtle: agent.Turtle, varName: String): Double = {
+    /* Gets the turtles variables by names, looking at breeds first then all turtles
+     * finds the index to handle the string. try for compiling.
+     */
+    var vn = turtle.world.breedsOwnIndexOf(turtle.getBreed(), varName)
+    if (vn < 0) {
+      var vn = turtle.world.turtlesOwnIndexOf(varName)
+    }
+    if (vn >= 0) {
+      turtle.getTurtleVariable(vn) match {
+        case x: java.lang.Double => x.doubleValue
+        case _ => throw new ExtensionException("TODO")
+      }
+    } else {
+      throw new ExtensionException("variable not present for turtle to get")
+    }
+  }
 
   // next two methods add orders
 
@@ -75,35 +94,35 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
 
   // next two methods hold assets or cash
 
-  def holdTradersAsset(turtle: agent.Turtle, quantity: Int): Unit = {
+  def holdTradersAsset(trader: agent.Turtle, quantity: Int): Unit = {
     // removes traders asset until execution is complete
-    val holdings = trader.getVariable(asset)
+    val holdings = getTurtleVariable(trader, asset).intValue
     setTurtleVariable(trader, asset,  holdings - quantity)
   }
 
-  def holdTradersCash(turtle: agent.Turtle, cost: Int): Unit = {
+  def holdTradersCash(trader: agent.Turtle, cost: Double): Unit = {
     // removes traders cash until execution is complete
-    val cash = trader.getVariable("cash")
+    val cash = getTurtleVariable(trader, "cash")
     setTurtleVariable(trader, "cash", cash - cost)
   }
 
   // next two methods sort price, size for finding the trade price
 
-  def sortBids(): List = {
+  def sortBids(): List[(Int, Int)] = {
     /* turn our hashmap into a list of tuples for finding price
      * sorts highest bidding price first, which is the first to fill
      */
     bidHash.iterator.toList.sortBy(- _._1)
   }
 
-  def sortAsks(): List = {
+  def sortAsks(): List[(Int, Int)] = {
     /* turn our hashmap into a list of tuples for finding price
      * sorts lowest asking price first, which is the first to fill
      */
     askHash.iterator.toList.sortBy(_._1)
   }
 
-  // next seven methods used in clearing orders
+  // next six methods used in filling orders
 
   def fillAllTraders(pss: Tuple3[Int, Int, String]): Unit = {
     /* if pss does not exist, that means there is no trades
@@ -117,32 +136,49 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
 
     // this is the trade price during the clearing event
     lastTradePrice = price
+    // with each clear, calculate a volume
+    lastTradeVolume = 0
 
     // if there is a partial fill (most often), we will fill asymmetrically
-    if side != None {
+    if (side != "none")
       fillPartial(price, size, side)
-      if side == "bid" {
-        // the bid is partially filled at the trade price
-        val fillBids = bidOrders.filter(_._1 > price)
-        val fillAsks = askOrders.filter(_._1 <= price)
-      }
-      else if side == "ask" {
-        // the ask is partially filled at the trade price
-        val fillBids = bidOrders.filter(_._1 >= price)
-        val fillAsks = askOrders.filter(_._1 < price)
-      }
+
+    if (side == "bid") {
+      // the bid is partially filled at the trade price
+      val fillBids = bidOrders.filter(_._1 > price)
+      val fillAsks = askOrders.filter(_._1 <= price)
+      // here, we fill all the normal orders
+      fillBids.map(order => fillOrderBid(order, price))
+      fillAsks.map(order => fillOrderAsk(order, price))
+
+      // lastTradeVolume has been updated with partial fills.
+      lastTradeVolume = lastTradeVolume + fillBids.map(_._2).sum + fillAsks.map(_._2).sum
     }
+
+    else if (side == "ask") {
+      // the ask is partially filled at the trade price
+      val fillBids = bidOrders.filter(_._1 >= price)
+      val fillAsks = askOrders.filter(_._1 < price)
+      // here, we fill all the normal orders
+      fillBids.map(order => fillOrderBid(order, price))
+      fillAsks.map(order => fillOrderAsk(order, price))
+
+      // lastTradeVolume has been updated with partial fills.
+      lastTradeVolume = lastTradeVolume + fillBids.map(_._2).sum + fillAsks.map(_._2).sum
+    }
+
     else {
       // all orders are entirely filled at the trade price
       val fillBids = bidOrders.filter(_._1 >= price)
       val fillAsks = askOrders.filter(_._1 <= price)
+      // here, we fill all the normal orders
+      fillBids.map(order => fillOrderBid(order, price))
+      fillAsks.map(order => fillOrderAsk(order, price))
+
+      // lastTradeVolume has been updated with partial fills.
+      lastTradeVolume = lastTradeVolume + fillBids.map(_._2).sum + fillAsks.map(_._2).sum
     }
 
-    fillBids.map(order => fillOrderBid(order, price))
-    fillAsks.map(order => fillOrderAsk(order, price))
-
-    // lastTradeVolume has been updated with partial fills.
-    lastTradeVolume = lastTradeVolume + fillBids.map(_._2).sum + fillAsks.map(_._2).sum
   }
 
   def fillPartial(price: Int, size: Int, side: String): Unit = {
@@ -150,47 +186,49 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
      * at that price with this side.
      * these orders are filled pro-rata as partial fills
      */
-    if side == "bid" {
+    if (side == "bid") {
       val partFillBids = bidOrders.filter(_._1 == price)
       // fill a percent of each order, last gets the remainder
-      val totalToFill = bidHash.get(price) - size
-      val percentToFill = totalToFill / bidHash.get(price)
+      val totalToFill = bidHash(price) - size
+      val percentToFill = totalToFill / bidHash(price)
       // only get the sizes of the orders
       val partFillBidSizes = partFillBids.map(_._2)
       // get a list of pro-rata sizes
       val proportionateFills = partFillBidSizes.map(size =>
-                                          math.round(size * percentToFill))
+                                        math.round(size * percentToFill).toInt)
       // there may be rounding errors, so sum the list and get difference
-      val sizeGap = size - proportionateFills.sum()
+      val sizeGap = size - proportionateFills.sum
       // the biggest order will fill the gap of size fills vs pro-rata
       val gapFillIdx = proportionateFills.indexOf(proportionateFills.max)
       val finalFills = proportionateFills.updated(gapFillIdx,
                                       proportionateFills(gapFillIdx) + sizeGap)
       val bidOrdersFills = (partFillBids zip finalFills)
       bidOrdersFills.map{ case (o, f) => fillOrderPartialBid(o, f) }
+      // lastTradeVolume should be zero before this
+      lastTradeVolume = totalToFill
 
       }
-    if side == "ask" {
+    if (side == "ask") {
       val partFillAsks = askOrders.filter(_._1 == price)
       // fill a percent of each order, last gets the remainder
-      val totalToFill = askHash.get(price) - size
-      val percentToFill = totalToFill / askHash.get(price)
+      val totalToFill = askHash(price) - size
+      val percentToFill = totalToFill / askHash(price)
       // only get the sizes of the orders
       val partFillAskSizes = partFillAsks.map(_._2)
       // get a list of pro-rata sizes
       val proportionateFills = partFillAskSizes.map(size =>
-                                          math.round(size * percentToFill))
+                                        math.round(size * percentToFill).toInt)
        // there may errors caused by rounding, so sum the list and get difference
-      val sizeGap = size - proportionateFills.sum()
+      val sizeGap = size - proportionateFills.sum
       // the biggest order will fill the gap of size fills vs pro-rata
       val gapFillIdx = proportionateFills.indexOf(proportionateFills.max)
       val finalFills = proportionateFills.updated(gapFillIdx,
                                       proportionateFills(gapFillIdx) + sizeGap)
       val askOrdersFills = (partFillAsks zip finalFills)
-      askOrdersFills.map{ case (o, f) => fillOrderPartialAsks(o, f) }
+      askOrdersFills.map{ case (o, f) => fillOrderPartialAsk(o, f) }
+      // lastTradeVolume should be zero before this
+      lastTradeVolume = totalToFill
      }
-     // lastTradeVolume should be zero before this
-     lastTradeVolume = totalToFill
 
   }
 
@@ -202,19 +240,19 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
      * delivers assets to traders and returns difference of cash
      */
      // gets the trader associated with the id of the order
-    val trader = agentManager.getTurtle(order._3)
+    val trader = getTurtle(order._3)
     val bidPrice = order._1
     val quantity = order._2
 
-    val cash = trader.getVariable("cash")
-    val holdings = trader.getVariable(asset)
+    val cash = getTurtleVariable(trader, "cash")
+    val holdings = getTurtleVariable(trader, asset)
 
     // assets to add are equal to the quantity traded
-    trader.setTurtleVariable(trader, asset, holdings + quantity)
+    setTurtleVariable(trader, asset, holdings + quantity)
 
     // cash is returned by quantity times difference between bidPrice and tradePrice
     val cashRet = (bidPrice - tradePrice) * quantity
-    trader.setTurtleVariable(trader, "cash", cash + cashRet)
+    setTurtleVariable(trader, "cash", cash + cashRet)
 
    }
 
@@ -223,15 +261,15 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
      * maps to all sell orders below trade price and, if side == buy at price
      * delivers cash to traders
      */
-    val trader = agentManager.getTurtle(order._3)
+    val trader = getTurtle(order._3)
     val quantity = order._2
 
-    val cash = trader.getVariable("cash")
+    val cash = getTurtleVariable(trader, "cash")
     val cashMade = tradePrice * quantity
 
     // the sellers get more cash than they hoped, but trade their quantity asset
     // therefore, there is no change in sellers assets which have been held
-    trader.setTurtleVariable(trader, "cash", cash + cashMade)
+    setTurtleVariable(trader, "cash", cash + cashMade)
   }
 
   def fillOrderPartialBid(order: Tuple3[Int, Int, Int], fillSize: Int): Unit = {
@@ -239,19 +277,19 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
      * to assets of the trader who is buying the fillSize
      * trade price is equal to order price in this case
      */
-    val trader = agentManager.getTurtle(order._3)
+    val trader = getTurtle(order._3)
     val tradePrice = order._1
     val quantity = order._2
 
-    val cash = trader.getVariable("cash")
-    val holdings = trader.getVariable(asset)
+    val cash = getTurtleVariable(trader, "cash")
+    val holdings = getTurtleVariable(trader, asset)
 
     // cash is returned for unfilled quantity times price
     val cashRet = tradePrice * (quantity - fillSize)
-    trader.setTurtleVariable(trader, "cash", cash + cashRet)
+    setTurtleVariable(trader, "cash", cash + cashRet)
 
     // assets to add are equal to the fillSize
-    trader.setTurtleVariable(trader, asset, holdings + fillSize)
+    setTurtleVariable(trader, asset, holdings + fillSize)
   }
 
   def fillOrderPartialAsk(order: Tuple3[Int, Int, Int], fillSize: Int): Unit = {
@@ -259,38 +297,43 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
      * cash to the trader who is selling the fillSize
      * trade price is equal to order price in this case
      */
-    val trader = agentManager.getTurtle(order._3)
+    val trader = getTurtle(order._3)
     val tradePrice = order._1
     val quantity = order._2
 
-    val cash = trader.getVariable("cash")
-    val holdings = trader.getVariable(asset)
+    val cash = getTurtleVariable(trader, "cash")
+    val holdings = getTurtleVariable(trader, asset)
 
     // cash is paid on filled quantity
     val cashMade = tradePrice * fillSize
-    trader.setTurtleVariable(trader, "cash", cash + cashMade)
+    setTurtleVariable(trader, "cash", cash + cashMade)
 
     // assets returned are equal to the unfilled quantity
     val assetRet = quantity - fillSize
-    trader.setTurtleVariable(trader, asset, holdings + assetRet)
+    setTurtleVariable(trader, asset, holdings + assetRet)
   }
 
-  def returnAllHoldings(pss: Option[Tuple3[Int, Int, String]]): Unit = {
+  // next three methods clear any orders that have been left unfilled
+
+  def returnAllHoldings(pss: Tuple3[Int, Int, String]): Unit = {
     /* returns all holdings above the price level for asks and
      * all the holdings below the price level for bids
      */
-    if pss == None {
+    if (pss._1 == 0) {
       val returnBidOrdersCash = bidOrders
       val returnAskOrdersAsset = askOrders
+
+      returnBidOrdersCash.map(order => returnCash(order))
+      returnAskOrdersAsset.map(order => returnAsset(order))
     }
     else {
       val price = pss._1
       val returnBidOrdersCash = bidOrders.filter(_._1 < price)
       val returnAskOrdersAsset = askOrders.filter(_._1 > price)
-    }
 
-    returnBidOrdersCash.map(order => returnCash(order))
-    returnAskOrdersAsset.map(order => returnAsset(order))
+      returnBidOrdersCash.map(order => returnCash(order))
+      returnAskOrdersAsset.map(order => returnAsset(order))
+    }
 
   }
 
@@ -299,8 +342,8 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
      * happens at the end of a clear, also if there is no
      */
 
-    val trader = agentManager.getTurtle(order._3)
-    val cash = trader.getVariable("cash")
+    val trader = getTurtle(order._3)
+    val cash = getTurtleVariable(trader, "cash")
     val cost = order._1 * order._2
     setTurtleVariable(trader, "cash", cash + cost)
   }
@@ -309,18 +352,15 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
     /* returns cash to trader turtles when buy orders were not filled
      *
      */
-    val trader = agentManager.getTurtle(order._3)
-    val holdings = trader.getVariable(asset)
+    val trader = getTurtle(order._3)
+    val holdings = getTurtleVariable(trader, asset)
     val quantity = order._2
     setTurtleVariable(trader, asset, holdings + quantity)
   }
 
+  // when clear is complete we reset the market to empty orders
 
   def resetAllOrders(): Unit = {
-
-    // save last trade before resetting it
-    lastTrade = List(lastTradePrice, lastTradeVolume)
-
     // clear all price -> size by creating a new HashMap
     bidHash = new HashMap[Int, Int]()
     askHash = new HashMap[Int, Int]()
@@ -328,10 +368,6 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
     // clear all orders with empty list
     bidOrders = Nil
     askOrders = Nil
-
-    // with each clear, calculate a volume and take the price for last trade
-    lastTradePrice = 0
-    lastTradeVolume = 0
   }
 
   def getAsset(): String = {
@@ -339,19 +375,27 @@ class Market(asset: String, context: api.Context) extends agent.Turtle {
     return asset
   }
 
-  def getLastTrade(): List {
-    return lastTrade
+  def getLastTrade(): List[Int] = {
+    return List(lastTradePrice, lastTradeVolume)
   }
+}
 
+object Router {
+  var routes = new HashMap[String, Market]()
 }
 
 object SetupMarket extends api.Command {
   // adds an agent that is a market to the simulation
   // initializes the agent with the asset type and class type
-  override def getSyntax = reporterSyntax(right = List(StringType))
-  def peform(Array[api.Argument], context: api.Context) {
+  // override def getSyntax = commandSyntax(right = List(String))
+  def peform(args: Array[api.Argument], context: api.Context) {
     // this method should be called once with just the asset name (args(0))
-    val market = new Market(args(0))
+    val marketName = args(0).getString
+    val market = new Market(marketName, context)
+    val check = Router.routes.get(marketName)
+    if (check == None) {
+      Router.routes(marketName) = market
+    }
     // TODO: create a turtle here that is a market
 
   }
@@ -360,12 +404,12 @@ object SetupMarket extends api.Command {
 
 object Buyer extends api.Command {
   // place buy orders at price and size with market from trader
-  override def getSyntax = commandSyntax(right = List(api.Agent | NumberType))
-  def perform(Array[api.Argument], context: api.Context) {
+  // override def getSyntax = commandSyntax(right = List(api.Agent | NumberType))
+  def perform(args: Array[api.Argument], context: api.Context) {
     // take the market and place the order buy side
     // take the trader, remove the cash to wait for clear
-    val trader = args(0)
-    val market = args(1)
+    val trader = args(0).getAgent
+    val market = Router.routes(args(1).getString)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
     if (price <= 0 || quantity <= 0)
@@ -375,8 +419,8 @@ object Buyer extends api.Command {
     // set the cost of goods bought
     val cost = price * quantity
     // PROTOCOL REQ: traders should have cash in their variables, or cannot trade
-    if (cost < trader.getVariable("cash")) {
-      market.addBid(price, quantity, trader.id)
+    if (cost <= turtle.getVariable("cash")) {
+      market.addBid(price, quantity, trader.id.toInt)
       market.holdTradersCash(trader, cost)
     }
   }
@@ -386,12 +430,12 @@ object Buyer extends api.Command {
 
 object Seller extends api.Command {
   // place sell orders at price and size with market from trader
-  override def getSyntax = commandSyntax(right = List(api.Agent | NumberType))
-  def perform(Array[api.Argument], context: api.Context) {
+  // override def getSyntax = commandSyntax(right = List(api.Agent | NumberType))
+  def perform(args: Array[api.Argument], context: api.Context) {
     // takes the market, places an order in the sell side
     // take the trader, remove the asset to wait for clear
-    val trader = args(0)
-    val market = args(1)
+    val trader = args(0).getAgent
+    val market = Router.routes(args(1).getString)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
     if (price <= 0 || quantity <= 0)
@@ -399,24 +443,24 @@ object Seller extends api.Command {
       throw new api.ExtensionException("price and quantity must be positive")
 
     // find what asset we are trading
-    asset = market.getAsset()
+    val asset = market.getAsset()
     // PROTOCOL REQ: traders should have this asset in their variables, or cannot trade
-    if (quantity < trader.getVariable(asset)) {
-      market.addAsk(price, quantity, trader.id)
+    if (quantity <= turtle.getVariable(asset)) {
+      market.addAsk(price, quantity, trader.id.toInt)
       market.holdTradersAsset(trader, quantity)
     }
-
+  }
 }
 
-object clear extends api.Command {
+object Clear extends api.Command {
   /* clear all orders from market:
    * find the fill price where supply meets demand
    * fill all bids above, all offers below, and the matching orders at the price
    * returns assets and capital to respective agents
    */
-   override def getSyntax = commandSyntax(right = List(api.Agent))
-   def perform(Array[api.Argument], context: api.Context) {
-     val market = args(0)
+   // override def getSyntax = commandSyntax(right = List(String))
+   def perform(args: Array[api.Argument], context: api.Context) {
+     val market = Router.routes(args(0).getString)
 
      // before finding fill price, sort bids and asks
      // these are arrays of tuples expressing the standing bids and asks in a market
@@ -425,20 +469,22 @@ object clear extends api.Command {
      val sortedAsks = market.sortAsks()
 
      // pss  - stands for Price, Size, Side (side = "bid"/"ask")
-     val pss = equilibriumPriceCalc(sortedBids, sortedAsks)
+     val pss = equilibriumPriceCalc(sortedBids, sortedAsks, (0, 0, "none"))
 
      // pss will equal None if there have been no fills, in that case all orders
      // are removed from the market and assets/cash are returned
-     if pss != None
+     if (pss._1 > 0)
        // this procedure adds assets or cash to traders according to the fills
        // and returns any assets or cash that is being held until execution
        market.fillAllTraders(pss)
      market.returnAllHoldings(pss)
      market.resetAllOrders()
+   }
 
 
-   def equilibriumPriceCalc(bids: List, asks: List,
-                            pss: Option[Tuple3[Int, Int, String]]):
+   def equilibriumPriceCalc(bids: List[Tuple2[Int, Int]],
+                            asks: List[Tuple2[Int, Int]],
+                            pss: Tuple3[Int, Int, String]):
                             Tuple3[Int, Int, String] = {
      /* compare the sizes in the first values of each list.
      * if bid is larger recursively call with tail of smaller size
@@ -450,7 +496,7 @@ object clear extends api.Command {
      val bid = bids.head
      val ask = asks.head
      // returns pss if either list is empty
-     if (bids == Nil) || (asks == Nil) { return pss }
+     if ((bids == Nil) || (asks == Nil)) { return pss }
 
      // price of the bid is higher than the ask. i.e. there is a fill this time
      if (bid._1 >= ask._1) {
@@ -464,14 +510,17 @@ object clear extends api.Command {
          // ask size bigger than bid size
          val nextpss = (ask._1, ask._2 - bid._2, "ask")
          val askHead = (nextpss._1, nextpss._2)
-         equilibriumPriceCalc(bids.tail, askHead :: asks.tail, pss)
+         equilibriumPriceCalc(bids.tail, askHead :: asks.tail, nextpss)
        }
        else if (bid._2 == ask._2) {
          // bids and ask are the same - perfect fill
          val priceList = List(bid._1, ask._1)
          // randomly choose either bid or ask size to use as fill price
          val price = priceList(Random.nextInt(priceList.size))
-         equilibriumPriceCalc(bids.tail, asks.tail, (price, 0, None))
+         equilibriumPriceCalc(bids.tail, asks.tail, (price, 0, "none"))
+       }
+       else {
+         throw new api.ExtensionException("error in calculating equilibrium price")
        }
      }
      else { return pss } // returns pss if bids and asks don't cross
@@ -480,7 +529,9 @@ object clear extends api.Command {
 
 object LastTradeReporter extends api.Reporter {
   // reports the last traded price and volume for each market
-  def report(args: Array[api.Argument]) {
+  // override def getSyntax = commandSyntax(right = List(String))
+  def report(args: Array[api.Argument]): List[Int] = {
+    val market = Router.routes(args(0).getString)
     return market.getLastTrade()
   }
 }
