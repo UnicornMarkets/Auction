@@ -4,3 +4,7 @@
 /auction.jar
 /auction.jar.pack.gz
 /auction.zip
+*.iml
+*.xml
+*.jar
+/.idea/*
