@@ -66,10 +66,10 @@ class Market(asset: String, currency: String, world: World) {
     if (vn >= 0) {
       turtle.getTurtleVariable(vn) match {
         case x: java.lang.Double => x.doubleValue
-        case _ => throw new ExtensionException("TODO")
+        case _ => throw new ExtensionException("varible not a number")
       }
     } else {
-      throw new api.ExtensionException("variable not present for turtle to get")
+      throw new api.ExtensionException("variable not present for turtle to get: ")
     }
   }
 
@@ -404,7 +404,7 @@ object Router {
 object SetupMarket extends api.Command {
   // adds an agent that is a market to the simulation
   // initializes the agent with the asset type and class type
-  override def getSyntax = commandSyntax(right = List(AgentType | StringType))
+  override def getSyntax = commandSyntax(right = List(AgentType, StringType, StringType))
   def perform(args: Array[api.Argument], context: api.Context) {
     // this method should be called once with just the asset name (args(0))
     val turtle = args(0).getTurtle
@@ -417,7 +417,7 @@ object SetupMarket extends api.Command {
 
 object Buyer extends api.Command {
   // place buy orders at price and size with market from trader
-  override def getSyntax = commandSyntax(right = List(AgentType | NumberType))
+  override def getSyntax = commandSyntax(right = List(AgentType, AgentType, StringType, StringType))
   def perform(args: Array[api.Argument], context: api.Context) {
     // take the market and place the order buy side
     // take the trader, remove the money to wait for clear
@@ -425,17 +425,14 @@ object Buyer extends api.Command {
     val market = Router.routes(args(1).getTurtle)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
-    if (price <= 0 || quantity <= 0)
-      // Do we throw an Exception here or just drop the order?
-      throw new api.ExtensionException("price and quantity must be positive")
-
-    // set the cost of goods bought
-    val cost = price * quantity
-
-    // PROTOCOL REQ: traders should have money in their variables, or cannot trade
-    if (market.checkBuyOrder(trader, cost)) {
-      market.addBid(price, quantity, trader.id.toInt)
-      market.holdTradersCurrency(trader, cost)
+    if (price <= 0 || quantity <= 0) {
+      // set the cost of goods bought
+      val cost = price * quantity
+      // PROTOCOL REQ: traders should have money in their variables, or cannot trade
+      if (market.checkBuyOrder(trader, cost)) {
+        market.addBid(price, quantity, trader.id.toInt)
+        market.holdTradersCurrency(trader, cost)
+      }
     }
   }
 }
@@ -444,7 +441,7 @@ object Buyer extends api.Command {
 
 object Seller extends api.Command {
   // place sell orders at price and size with market from trader
-  override def getSyntax = commandSyntax(right = List(AgentType | NumberType))
+  override def getSyntax = commandSyntax(right = List(AgentType, AgentType, StringType, StringType))
   def perform(args: Array[api.Argument], context: api.Context) {
     // takes the market, places an order in the sell side
     // take the trader, remove the asset to wait for clear
@@ -452,14 +449,12 @@ object Seller extends api.Command {
     val market = Router.routes(args(1).getTurtle)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
-    if (price <= 0 || quantity <= 0)
-      // Do we throw an Exception here or just drop the order?
-      throw new api.ExtensionException("price and quantity must be positive")
-
-    // PROTOCOL REQ: traders should have this asset in their variables, or cannot trade
-    if (market.checkSellOrder(trader, quantity))  {
-      market.addAsk(price, quantity, trader.id.toInt)
-      market.holdTradersAsset(trader, quantity)
+    if (price >= 0 || quantity >= 0) {
+      // PROTOCOL REQ: traders should have this asset in their variables, or cannot trade
+      if (market.checkSellOrder(trader, quantity))  {
+        market.addAsk(price, quantity, trader.id.toInt)
+        market.holdTradersAsset(trader, quantity)
+      }
     }
   }
 }

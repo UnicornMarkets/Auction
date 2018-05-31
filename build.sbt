@@ -2,7 +2,7 @@ enablePlugins(org.nlogo.build.NetLogoExtension)
 
 netLogoExtName      := "auction"
 
-netLogoClassManager := "AuctionExtension"
+netLogoClassManager := "org.nlogo.auction.AuctionExtension"
 
 netLogoZipSources   := false
 
