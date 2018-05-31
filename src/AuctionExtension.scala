@@ -331,7 +331,7 @@ class Market(asset: String, currency: String, world: World) {
     /* returns all holdings above the price level for asks and
      * all the holdings below the price level for bids
      */
-    if (pss._1 == 0) {
+    if (pss._3 == "no-trade") {
       val returnBidOrdersMoney = bidOrders
       val returnAskOrdersAsset = askOrders
 
@@ -481,7 +481,7 @@ object Clear extends api.Command {
      val sortedAsks = market.sortAsks()
 
      // pss  - stands for Price, Size, Side (side = "bid"/"ask")
-     val pss = equilibriumPriceCalc(sortedBids, sortedAsks, (0, 0, "none"))
+     val pss = equilibriumPriceCalc(sortedBids, sortedAsks, (0, 0, "no-trade"))
 
      // pss will equal None if there have been no fills, in that case all orders
      // are removed from the market and assets/money are returned
