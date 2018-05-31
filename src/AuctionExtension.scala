@@ -203,7 +203,7 @@ class Market(asset: String, currency: String, world: World) {
       val partFillBids = bidOrders.filter(_._1 == price)
       // fill a percent of each order, last gets the remainder
       val totalToFill = bidHash(price) - size
-      val percentToFill = totalToFill / bidHash(price)
+      val percentToFill = totalToFill.toFloat / bidHash(price)
       // only get the sizes of the orders
       val partFillBidSizes = partFillBids.map(_._2)
       // get a list of pro-rata sizes
@@ -225,7 +225,7 @@ class Market(asset: String, currency: String, world: World) {
       val partFillAsks = askOrders.filter(_._1 == price)
       // fill a percent of each order, last gets the remainder
       val totalToFill = askHash(price) - size
-      val percentToFill = totalToFill / askHash(price)
+      val percentToFill = totalToFill.toFloat / askHash(price)
       // only get the sizes of the orders
       val partFillAskSizes = partFillAsks.map(_._2)
       // get a list of pro-rata sizes
@@ -242,7 +242,6 @@ class Market(asset: String, currency: String, world: World) {
       // lastTradeVolume should be zero before this
       lastTradeVolume = totalToFill
      }
-
   }
 
   // orders are price, size, who number - use who number to find turtle to fill
