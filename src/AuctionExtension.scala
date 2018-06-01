@@ -24,9 +24,11 @@ class Market(asset: String, currency: String, world: World) {
   /* Market is connected to an agent. It has methods for handling orders
    * we use a HashMap so we can do incremental updates with repeating prices
    * we should only have a single price key with size to find the fill price
+   * World gives direct access to turtles by who numbers
    */
 
-  // agent.AgentManagement gives direct access to turtles by who numbers
+  // for setTraderVariable we want index numbers to reuse for asset and currency
+  var indexCache = new HashMap[String, Int]()
 
   // initializes empty HashMaps for bids/asks
   var bidHash = new HashMap[Int, Int]()
@@ -37,7 +39,6 @@ class Market(asset: String, currency: String, world: World) {
   // with each clear, calculate a volume and take the price for last trade
   var lastTradePrice = 0
   var lastTradeVolume = 0
-
   // this method is for transactions with turtles
 
   def getVariableIndex(turtle: agent.Turtle, varName: String): Int = {
@@ -96,26 +97,26 @@ class Market(asset: String, currency: String, world: World) {
 
   def checkSellOrder(trader: agent.Turtle, quantity: Int): Boolean = {
     // if quantity passes then place sell order
-    quantity <= getTurtleVariable(trader, asset)
+    quantity <= getTraderVariable(trader, asset)
   }
 
   def checkBuyOrder(trader: agent.Turtle, cost: Int): Boolean = {
     // if quantity passes then place buy order
-    cost <= getTurtleVariable(trader, currency)
+    cost <= getTraderVariable(trader, currency)
   }
 
   // next two methods hold assets or currency
 
   def holdTradersAsset(trader: agent.Turtle, quantity: Int): Unit = {
     // removes traders asset until execution is complete
-    val holdings = getTurtleVariable(trader, asset).intValue
-    setTurtleVariable(trader, asset,  holdings - quantity)
+    val holdings = getTraderVariable(trader, asset).intValue
+    setTraderVariable(trader, asset,  holdings - quantity)
   }
 
   def holdTradersCurrency(trader: agent.Turtle, cost: Double): Unit = {
     // removes traders currency until execution is complete
-    val money = getTurtleVariable(trader, currency)
-    setTurtleVariable(trader, currency, money - cost)
+    val money = getTraderVariable(trader, currency)
+    setTraderVariable(trader, currency, money - cost)
   }
 
   // next two methods sort price, size for finding the trade price
@@ -255,15 +256,15 @@ class Market(asset: String, currency: String, world: World) {
     val bidPrice = order._1
     val quantity = order._2
 
-    val money = getTurtleVariable(trader, currency)
-    val holdings = getTurtleVariable(trader, asset)
+    val money = getTraderVariable(trader, currency)
+    val holdings = getTraderVariable(trader, asset)
 
     // assets to add are equal to the quantity traded
-    setTurtleVariable(trader, asset, holdings + quantity)
+    setTraderVariable(trader, asset, holdings + quantity)
 
     // money is returned by quantity times difference between bidPrice and tradePrice
     val moneyRet = (bidPrice - tradePrice) * quantity
-    setTurtleVariable(trader, currency, money + moneyRet)
+    setTraderVariable(trader, currency, money + moneyRet)
 
    }
 
@@ -275,12 +276,12 @@ class Market(asset: String, currency: String, world: World) {
     val trader = world.getTurtle(order._3)
     val quantity = order._2
 
-    val money = getTurtleVariable(trader, currency)
+    val money = getTraderVariable(trader, currency)
     val moneyMade = tradePrice * quantity
 
     // the sellers get more money than they hoped, but trade their quantity asset
     // therefore, there is no change in sellers assets which have been held
-    setTurtleVariable(trader, currency, money + moneyMade)
+    setTraderVariable(trader, currency, money + moneyMade)
   }
 
   def fillOrderPartialBid(order: Tuple3[Int, Int, Int], fillSize: Int): Unit = {
@@ -292,15 +293,15 @@ class Market(asset: String, currency: String, world: World) {
     val tradePrice = order._1
     val quantity = order._2
 
-    val money = getTurtleVariable(trader, currency)
-    val holdings = getTurtleVariable(trader, asset)
+    val money = getTraderVariable(trader, currency)
+    val holdings = getTraderVariable(trader, asset)
 
     // money is returned for unfilled quantity times price
     val moneyRet = tradePrice * (quantity - fillSize)
-    setTurtleVariable(trader, currency, money + moneyRet)
+    setTraderVariable(trader, currency, money + moneyRet)
 
     // assets to add are equal to the fillSize
-    setTurtleVariable(trader, asset, holdings + fillSize)
+    setTraderVariable(trader, asset, holdings + fillSize)
   }
 
   def fillOrderPartialAsk(order: Tuple3[Int, Int, Int], fillSize: Int): Unit = {
@@ -312,16 +313,16 @@ class Market(asset: String, currency: String, world: World) {
     val tradePrice = order._1
     val quantity = order._2
 
-    val money = getTurtleVariable(trader, currency)
-    val holdings = getTurtleVariable(trader, asset)
+    val money = getTraderVariable(trader, currency)
+    val holdings = getTraderVariable(trader, asset)
 
     // money is paid on filled quantity
     val moneyMade = tradePrice * fillSize
-    setTurtleVariable(trader, currency, money + moneyMade)
+    setTraderVariable(trader, currency, money + moneyMade)
 
     // assets returned are equal to the unfilled quantity
     val assetRet = quantity - fillSize
-    setTurtleVariable(trader, asset, holdings + assetRet)
+    setTraderVariable(trader, asset, holdings + assetRet)
   }
 
   // next three methods clear any orders that have been left unfilled
@@ -354,9 +355,9 @@ class Market(asset: String, currency: String, world: World) {
      */
 
     val trader = world.getTurtle(order._3)
-    val money = getTurtleVariable(trader, currency)
+    val money = getTraderVariable(trader, currency)
     val cost = order._1 * order._2
-    setTurtleVariable(trader, currency, money + cost)
+    setTraderVariable(trader, currency, money + cost)
   }
 
   def returnAsset(order: Tuple3[Int, Int, Int]): Unit = {
@@ -364,9 +365,9 @@ class Market(asset: String, currency: String, world: World) {
      *
      */
     val trader = world.getTurtle(order._3)
-    val holdings = getTurtleVariable(trader, asset)
+    val holdings = getTraderVariable(trader, asset)
     val quantity = order._2
-    setTurtleVariable(trader, asset, holdings + quantity)
+    setTraderVariable(trader, asset, holdings + quantity)
   }
 
   // when clear is complete we reset the market to empty orders
