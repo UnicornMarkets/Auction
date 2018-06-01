@@ -40,36 +40,35 @@ class Market(asset: String, currency: String, world: World) {
 
   // this method is for transactions with turtles
 
-  def setTurtleVariable(turtle: agent.Turtle, varName: String, value: Double): Unit = {
+  def getVariableIndex(turtle: agent.Turtle, varName: String): Int = {
+    /* gets the index of the variable by searching all the variables by name
+     */
+    for (i <- 0 until turtle.variables.size)
+      if (turtle.variableName(i) == varName.toUpperCase()) return i
+    return -1
+  }
+
+  def setTraderVariable(turtle: agent.Turtle, varName: String, value: Double): Unit = {
     /* Sets the turtles variables by names, looking at breeds first then all turtles
      * finds the index to handle the string
      */
-    var vn = turtle.world.breedsOwnIndexOf(turtle.getBreed(), varName)
-    if (vn < 0) {
-      var vn = turtle.world.turtlesOwnIndexOf(varName)
-    }
-    if (vn >= 0) {
-      turtle.setTurtleVariable(vn, value)
+    var varIndex = indexCache.getOrElse(varName, -1)
+    if (varIndex == -1)
+      varIndex = getVariableIndex(turtle, varName)
+      indexCache(varName) = varIndex
+    if (varIndex >= 0) {
+      turtle.setTurtleVariable(varIndex, value)
     } else {
       throw new api.ExtensionException("variable not present for turtle to set")
     }
   }
 
-  def getTurtleVariable(turtle: agent.Turtle, varName: String): Double = {
-    /* Gets the turtles variables by names, looking at breeds first then all turtles
-     * finds the index to handle the string. try for compiling.
+  def getTraderVariable(turtle: agent.Turtle, varName: String): Double = {
+    /* Gets the turtles variables by names, using getVariable taking the string
      */
-    var vn = turtle.world.breedsOwnIndexOf(turtle.getBreed(), varName)
-    if (vn < 0) {
-      var vn = turtle.world.turtlesOwnIndexOf(varName)
-    }
-    if (vn >= 0) {
-      turtle.getTurtleVariable(vn) match {
-        case x: java.lang.Double => x.doubleValue
-        case _ => throw new ExtensionException("varible not a number")
-      }
-    } else {
-      throw new api.ExtensionException("variable not present for turtle to get: ")
+    turtle.getVariable(varName.toUpperCase()) match {
+      case x: java.lang.Double => x.doubleValue
+      case _ => throw new ExtensionException("varible not a number")
     }
   }
 
