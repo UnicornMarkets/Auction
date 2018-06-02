@@ -16,7 +16,8 @@ class AuctionExtension extends api.DefaultClassManager {
     manager.addPrimitive("buy", Buyer)
     manager.addPrimitive("sell", Seller)
     manager.addPrimitive("clear", Clear)
-    manager.addPrimitive("last-trade", LastTradeReporter)
+    manager.addPrimitive("last-trade-price", LastTradePriceReporter)
+    manager.addPrimitive("last-trade-volume", LastTradeVolumeReporter)
   }
 }
 
@@ -41,35 +42,39 @@ class Market(asset: String, currency: String, world: World) {
   var lastTradeVolume = 0
   // this method is for transactions with turtles
 
-  def getVariableIndex(turtle: agent.Turtle, varName: String): Int = {
+  def getVariableIndex(turtle: api.Turtle, varName: String): Int = {
     /* gets the index of the variable by searching all the variables by name
      */
-    for (i <- 0 until turtle.variables.size)
-      if (turtle.variableName(i) == varName.toUpperCase()) return i
-    return -1
+    val upperName = varName.toUpperCase
+    val turt = turtle.asInstanceOf[agent.Turtle]
+    (0 until turtle.variables.length).find(i => upperName == turt.variableName(i)).getOrElse(-1)
   }
 
-  def setTraderVariable(turtle: agent.Turtle, varName: String, value: Double): Unit = {
-    /* Sets the turtles variables by names, looking at breeds first then all turtles
-     * finds the index to handle the string
+  def setTraderVariable(turtle: api.Turtle, varName: String, value: Double): Unit = {
+    /* Sets the turtles variables by names
+     * finds the index to handle the string, Caches it
      */
     var varIndex = indexCache.getOrElse(varName, -1)
     if (varIndex == -1)
       varIndex = getVariableIndex(turtle, varName)
       indexCache(varName) = varIndex
     if (varIndex >= 0) {
-      turtle.setTurtleVariable(varIndex, value)
+      turtle.setVariable(varIndex, value.asInstanceOf[java.lang.Double])
     } else {
       throw new api.ExtensionException("variable not present for turtle to set")
     }
   }
 
-  def getTraderVariable(turtle: agent.Turtle, varName: String): Double = {
+  def getTraderVariable(turtle: api.Turtle, varName: String): Double = {
     /* Gets the turtles variables by names, using getVariable taking the string
      */
-    turtle.getVariable(varName.toUpperCase()) match {
+    var varIndex = indexCache.getOrElse(varName, -1)
+    if (varIndex == -1)
+      varIndex = getVariableIndex(turtle, varName)
+      indexCache(varName) = varIndex
+    turtle.getVariable(varIndex) match {
       case x: java.lang.Double => x.doubleValue
-      case _ => throw new ExtensionException("varible not a number")
+      case _ => throw new ExtensionException("variable not a number")
     }
   }
 
@@ -95,25 +100,25 @@ class Market(asset: String, currency: String, world: World) {
 
   // checks the order before passing it.
 
-  def checkSellOrder(trader: agent.Turtle, quantity: Int): Boolean = {
+  def checkSellOrder(trader: api.Turtle, quantity: Int): Boolean = {
     // if quantity passes then place sell order
     quantity <= getTraderVariable(trader, asset)
   }
 
-  def checkBuyOrder(trader: agent.Turtle, cost: Int): Boolean = {
+  def checkBuyOrder(trader: api.Turtle, cost: Int): Boolean = {
     // if quantity passes then place buy order
     cost <= getTraderVariable(trader, currency)
   }
 
   // next two methods hold assets or currency
 
-  def holdTradersAsset(trader: agent.Turtle, quantity: Int): Unit = {
+  def holdTradersAsset(trader: api.Turtle, quantity: Int): Unit = {
     // removes traders asset until execution is complete
     val holdings = getTraderVariable(trader, asset).intValue
     setTraderVariable(trader, asset,  holdings - quantity)
   }
 
-  def holdTradersCurrency(trader: agent.Turtle, cost: Double): Unit = {
+  def holdTradersCurrency(trader: api.Turtle, cost: Double): Unit = {
     // removes traders currency until execution is complete
     val money = getTraderVariable(trader, currency)
     setTraderVariable(trader, currency, money - cost)
@@ -392,8 +397,12 @@ class Market(asset: String, currency: String, world: World) {
     return currency
   }
 
-  def getLastTrade(): List[Int] = {
-    return List(lastTradePrice, lastTradeVolume)
+  def getLastTradePrice(): java.lang.Double = {
+    return lastTradePrice
+  }
+
+  def getLastTradeVolume(): java.lang.Double = {
+    return lastTradeVolume
   }
 }
 
@@ -421,7 +430,7 @@ object Buyer extends api.Command {
   def perform(args: Array[api.Argument], context: api.Context) {
     // take the market and place the order buy side
     // take the trader, remove the money to wait for clear
-    val trader = args(0).getTurtle.asInstanceOf[agent.Turtle]
+    val trader = args(0).getTurtle
     val market = Router.routes(args(1).getTurtle)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
@@ -445,7 +454,7 @@ object Seller extends api.Command {
   def perform(args: Array[api.Argument], context: api.Context) {
     // takes the market, places an order in the sell side
     // take the trader, remove the asset to wait for clear
-    val trader = args(0).getTurtle.asInstanceOf[agent.Turtle]
+    val trader = args(0).getTurtle
     val market = Router.routes(args(1).getTurtle)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
@@ -500,11 +509,12 @@ object Clear extends api.Command {
      * - stop when neither price is larger return the price and remaining size.
      * - stop if a list is empty return a price.
      */
-     val bid = bids.head
-     val ask = asks.head
+
      // returns pss if either list is empty
      if ((bids == Nil) || (asks == Nil)) { return pss }
 
+     val bid = bids.head
+     val ask = asks.head
      // price of the bid is higher than the ask. i.e. there is a fill this time
      if (bid._1 >= ask._1) {
        if (bid._2 > ask._2) {
@@ -534,11 +544,20 @@ object Clear extends api.Command {
    }
 }
 
-object LastTradeReporter extends api.Reporter {
+object LastTradePriceReporter extends api.Reporter {
   // reports the last traded price and volume for each market
   override def getSyntax = reporterSyntax(right = List(AgentType), ret = ListType)
-  def report(args: Array[api.Argument], context: api.Context): List[Int] = {
+  def report(args: Array[api.Argument], context: api.Context): java.lang.Double = {
     val market = Router.routes(args(0).getTurtle)
-    return market.getLastTrade()
+    return market.getLastTradePrice()
+  }
+}
+
+object LastTradeVolumeReporter extends api.Reporter {
+  // reports the last traded price and volume for each market
+  override def getSyntax = reporterSyntax(right = List(AgentType), ret = NumberType)
+  def report(args: Array[api.Argument], context: api.Context): java.lang.Double = {
+    val market = Router.routes(args(0).getTurtle)
+    return market.getLastTradeVolume()
   }
 }
