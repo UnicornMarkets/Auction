@@ -511,7 +511,7 @@ object Clear extends api.Command {
      */
 
      // returns pss if either list is empty
-     if ((bids == Nil) || (asks == Nil)) { return pss }
+     if (bids.isEmpty || asks.isEmpty) { return pss }
 
      val bid = bids.head
      val ask = asks.head
