@@ -80,7 +80,7 @@ class Market(asset: String, currency: String, world: World) {
 
   // next two methods add orders
 
-  def addAsk(price: Int, quantity: Int, traderId: Int): Unit = {
+  def addBid(price: Int, quantity: Int, traderId: Int): Unit = {
     /* called from Seller
      * this procedure adds the size to the price in a bid Hashmap
      * it then adds the order to an orderbook for filling the traders by Id
@@ -89,7 +89,7 @@ class Market(asset: String, currency: String, world: World) {
     bidOrders = (price, quantity, traderId) :: bidOrders
   }
 
-  def addBid(price: Int, quantity: Int, traderId: Int): Unit = {
+  def addAsk(price: Int, quantity: Int, traderId: Int): Unit = {
     /* called from Buyer
      * this procedure adds the size to the price in an ask Hashmap
      * it then adds the order to an orderbook for filling the traders by Id
