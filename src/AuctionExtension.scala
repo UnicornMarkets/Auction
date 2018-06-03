@@ -434,7 +434,7 @@ object Buyer extends api.Command {
     val market = Router.routes(args(1).getTurtle)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
-    if (price <= 0 || quantity <= 0) {
+    if (price >= 0 && quantity >= 0) {
       // set the cost of goods bought
       val cost = price * quantity
       // PROTOCOL REQ: traders should have money in their variables, or cannot trade
@@ -458,7 +458,7 @@ object Seller extends api.Command {
     val market = Router.routes(args(1).getTurtle)
     val price = args(2).getIntValue
     val quantity = args(3).getIntValue
-    if (price >= 0 || quantity >= 0) {
+    if (price >= 0 && quantity >= 0) {
       // PROTOCOL REQ: traders should have this asset in their variables, or cannot trade
       if (market.checkSellOrder(trader, quantity))  {
         market.addAsk(price, quantity, trader.id.toInt)
