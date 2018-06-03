@@ -531,16 +531,78 @@ object Clear extends api.Command {
        }
        else if (bid._2 == ask._2) {
          // bids and ask are the same - perfect fill
-         val priceList = List(bid._1, ask._1)
-         // randomly choose either bid or ask size to use as fill price
-         val price = priceList(Random.nextInt(priceList.size))
-         equilibriumPriceCalc(bids.tail, asks.tail, (price, 0, "none"))
+         // we need to know if the (filled) bid or ask price would have crossed the next price
+         // we cannot fill at a price where other orders could have been filled.
+
+         if (bids.tail.isEmpty && asks.tail.isEmpty) {
+           // all orders have a perfect fill to the lowest price
+           // use one-of bid or ask price
+           val priceList = List(bid._1, ask._1)
+           // randomly choose either bid or ask size to use as fill price
+           val price = priceList(Random.nextInt(priceList.size))
+           equilibriumPriceCalc(bids.tail, asks.tail, (price, 0, "none"))
+         }
+         else if (bids.tail.isEmpty) {
+           // the buy side is entirely filled
+           // send the recent ask price
+           equilibriumPriceCalc(bids.tail, asks.tail, (ask._1, 0, "none"))
+         }
+         else if (asks.tail.isEmpty) {
+           // the sell side is entirely filled
+           // send the recent bid price
+           equilibriumPriceCalc(bids.tail, asks.tail, (bid._1, 0, "none"))
+         }
+         else {
+           // both lists have at least one more order in them
+           // for this case use bothCompleteFill method
+           val price = bothCompleteFill(bid._1, ask._1, bids.tail.head._1, asks.tail.head._1)
+           equilibriumPriceCalc(bids.tail, asks.tail, (price, 0, "none"))
+         }
        }
        else {
          throw new api.ExtensionException("error in calculating equilibrium price")
        }
      }
      else { return pss } // returns pss if bids and asks don't cross
+   }
+
+   def bothCompleteFill(bidFillPrice: Int, askFillPrice: Int,
+                        bidNextPrice: Int, askNextPrice: Int): Int = {
+     /* we need to know if the (filled) bid or ask price would
+      * have crossed the next price. we should avoid filling beyond a
+      * price where other orders could have been filled.
+      * this would confuse traders why they haven't been filled,
+      * and describe an 'unfair' market. this is an equitable mechanism
+      */
+     if (bidFillPrice < askNextPrice && askFillPrice > bidNextPrice) {
+       // recent bids and ask prices don't cross with the next price
+       // use one-of bid or ask price
+       val priceList = List(bidFillPrice, askFillPrice)
+       // randomly choose either bid or ask to use as fill price
+       val price = priceList(Random.nextInt(priceList.size))
+       return price
+     }
+     else if (bidFillPrice >= askNextPrice && askFillPrice <= bidNextPrice) {
+       // both bids and ask prices cross next price
+       // use Vickrey auction style pricing mechanism - next price is the trade price
+       val priceList = List(bidNextPrice, askNextPrice)
+       // randomly choose either of next orders bid or ask to use as fill price
+       val price = priceList(Random.nextInt(priceList.size))
+       return price
+     }
+     else if (bidFillPrice < askNextPrice && askFillPrice <= bidNextPrice) {
+       // recent bid would not fill next ask, but recent ask would fill next bid
+       // recent bid price settles to protect next bid
+       return bidFillPrice
+     }
+     else if (bidFillPrice >= askNextPrice && askFillPrice > bidNextPrice) {
+       // recent bid would fill next ask, but recent ask would not fill next bid
+       // recent bid price settles to protect next bid
+       return askFillPrice
+     }
+     else {
+       throw new api.ExtensionException("error in the complete fill price mechanism")
+     }
    }
 }
 
