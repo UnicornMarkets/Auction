@@ -489,7 +489,7 @@ object Clear extends api.Command {
 
      // pss will equal None if there have been no fills, in that case all orders
      // are removed from the market and assets/money are returned
-     if (pss._1 > 0)
+     if (pss._3 != "no-trade")
        // this procedure adds assets or money to traders according to the fills
        // and returns any assets or money that is being held until execution
        market.fillAllTraders(pss)
