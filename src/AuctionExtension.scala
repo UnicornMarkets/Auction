@@ -55,9 +55,6 @@ class Market(asset: String, currency: String, world: World) {
      * finds the index to handle the string, Caches it
      */
     var varIndex = indexCache.getOrElse(varName, -1)
-    if (varIndex == -1)
-      varIndex = getVariableIndex(turtle, varName)
-      indexCache(varName) = varIndex
     if (varIndex >= 0) {
       turtle.setVariable(varIndex, value.asInstanceOf[java.lang.Double])
     } else {
@@ -158,8 +155,12 @@ class Market(asset: String, currency: String, world: World) {
     lastTradeVolume = 0
 
     // if there is a partial fill (most often), we will fill asymmetrically
-    if (side != "none")
-      fillPartial(price, size, side)
+    side match {
+        case "bid" => fillPartial(price, size, side, bidOrders)
+        case "ask" => fillPartial(price, size, side, askOrders)
+        case "none" =>
+        case _ => throw new ExtensionException("side should not be this value")
+      }
 
     if (side == "bid") {
       // the bid is partially filled at the trade price
@@ -199,54 +200,42 @@ class Market(asset: String, currency: String, world: World) {
 
   }
 
-  def fillPartial(price: Int, size: Int, side: String): Unit = {
+  def fillPartial(price: Int, size: Int, side: String,
+                  orders: List[Tuple3[Int, Int, Int]]): Unit = {
     /* the final fill price with pss should fill a partial on each order
      * at that price with this side.
      * these orders are filled pro-rata as partial fills
      */
-    if (side == "bid") {
-      val partFillBids = bidOrders.filter(_._1 == price)
-      // fill a percent of each order, last gets the remainder
-      val totalToFill = bidHash(price) - size
-      val percentToFill = totalToFill.toFloat / bidHash(price)
-      // only get the sizes of the orders
-      val partFillBidSizes = partFillBids.map(_._2)
-      // get a list of pro-rata sizes
-      val proportionateFills = partFillBidSizes.map(size =>
-                                        math.round(size * percentToFill).toInt)
-      // there may be rounding errors, so sum the list and get difference
-      val sizeGap = size - proportionateFills.sum
-      // the biggest order will fill the gap of size fills vs pro-rata
-      val gapFillIdx = proportionateFills.indexOf(proportionateFills.max)
-      val finalFills = proportionateFills.updated(gapFillIdx,
-                                      proportionateFills(gapFillIdx) + sizeGap)
-      val bidOrdersFills = (partFillBids zip finalFills)
-      bidOrdersFills.map{ case (o, f) => fillOrderPartialBid(o, f) }
-      // lastTradeVolume should be zero before this
-      lastTradeVolume = totalToFill
+    // only get the orders at this price, than the sizes of the orders
+    val partFillOrders = orders.filter(_._1 == price)
+    val partFillOrdersSizes = partFillOrders.map(_._2)
+    // size is the unfilled at this price, so get the filled
+    val totalToFill = partFillOrdersSizes.sum - size
+    // fill a percent of each order relative to the total orders size
+    val percentToFill = totalToFill.toFloat / partFillOrdersSizes.sum
+    // get a list of pro-rata sizes
+    val proportionateFills = partFillOrdersSizes.map(size =>
+                                      math.round(size * percentToFill).toInt)
+    // there may be rounding errors, so sum the list and get difference
+    val sizeGap = totalToFill - proportionateFills.sum
+    // the biggest order will fill the size gap vs pro-rata
+    val gapFillIdx = proportionateFills.indexOf(proportionateFills.max)
+    val finalFills = proportionateFills.updated(gapFillIdx,
+                                    proportionateFills(gapFillIdx) + sizeGap)
+    val ordersFilled = (partFillOrders zip finalFills)
 
-      }
-    if (side == "ask") {
-      val partFillAsks = askOrders.filter(_._1 == price)
-      // fill a percent of each order, last gets the remainder
-      val totalToFill = askHash(price) - size
-      val percentToFill = totalToFill.toFloat / askHash(price)
-      // only get the sizes of the orders
-      val partFillAskSizes = partFillAsks.map(_._2)
-      // get a list of pro-rata sizes
-      val proportionateFills = partFillAskSizes.map(size =>
-                                        math.round(size * percentToFill).toInt)
-       // there may errors caused by rounding, so sum the list and get difference
-      val sizeGap = size - proportionateFills.sum
-      // the biggest order will fill the gap of size fills vs pro-rata
-      val gapFillIdx = proportionateFills.indexOf(proportionateFills.max)
-      val finalFills = proportionateFills.updated(gapFillIdx,
-                                      proportionateFills(gapFillIdx) + sizeGap)
-      val askOrdersFills = (partFillAsks zip finalFills)
-      askOrdersFills.map{ case (o, f) => fillOrderPartialAsk(o, f) }
-      // lastTradeVolume should be zero before this
-      lastTradeVolume = totalToFill
-     }
+    if (side == "bid") {
+      ordersFilled.map{ case (o, f) => fillOrderPartialBid(o, f) }
+    }
+    else if (side == "ask") {
+      ordersFilled.map{ case (o, f) => fillOrderPartialAsk(o, f) }
+    }
+    else {
+      throw new ExtensionException("side should not be this value")
+    }
+    // lastTradeVolume should be zero before this
+    lastTradeVolume = totalToFill
+
   }
 
   // orders are price, size, who number - use who number to find turtle to fill
