@@ -374,6 +374,8 @@ class Market(asset: String, currency: String, world: World) {
     // clear all orders with empty list
     bidOrders = Nil
     askOrders = Nil
+
+    lastTradeVolume = 0
   }
 
   def getAsset(): String = {
