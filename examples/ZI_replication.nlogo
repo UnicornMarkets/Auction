@@ -1,6 +1,6 @@
 extensions [ auction ]
 
-turtles-own [ cash asset price account ]
+turtles-own [ cash asset price account percent-return]
 globals [ trade-price cleared-volume stop-indicator]
 breed [ producers producer ]
 breed [ consumers consumer ]
@@ -17,24 +17,32 @@ to setup
     set asset init-assets
     set account cash + asset * trade-price
     setxy (account * max-pxcor / (account-limit * 2))  5
-    set shape "plant"
-    set color green
-    set price int (cost * (1 + random-float %-producer-return))
+    set shape "dot"
+    set color red ; producers are always red
+    ; we uniformly pick a percent return between 0 and the slider
+    set percent-return random-float max-producer-return
+    ; return = price - cost
+    ; percent-return = (price - cost / cost)
+    set price int (cost * (1 + percent-return))
   ]
   create-consumers 1 [
     set cash init-account
     set asset init-assets
     set account cash + asset * trade-price
     setxy (account * max-pxcor / (account-limit * 2)) -5
-    set shape "person"
-    set color pink
-    set price int (utility / (1 + random-float %-consumer-return))
+    set shape "dot"
+    set color blue ; consumers are always blue
+    ; we uniformly pick a percent return between 0 and the slider
+    set percent-return random-float max-consumer-return
+    ; return = utility - price
+    ; percent-return = (utility - price / price)
+    set price int (utility / (1 + percent-return))
   ]
   create-markets 1 [
     auction:setup-market self "asset" "cash"
     set name "asset"
     set shape "target"
-    set color blue
+    set color green
     set size 4
     setxy 46 0
   ]
@@ -180,11 +188,13 @@ to replicate ; turtle procedure, for producers and consumers
       set account cash + asset * trade-price
       ; create a new price for this new trader and a location
       ifelse breed = producers [
-        set price int (cost * (1 + random-float %-producer-return))
+        set percent-return random-float max-producer-return
+        set price int (cost * (1 + percent-return))
         setxy (account * max-pxcor / (account-limit * 2)) abs random-ycor
       ] [
         if breed = consumers [
-          set price int (utility / (1 + random-float %-consumer-return))
+          set percent-return random-float max-consumer-return
+          set price int (utility / (1 + percent-return))
           setxy (account * max-pxcor / (account-limit * 2)) (- abs random-ycor)
         ]
       ]
@@ -262,7 +272,7 @@ init-account
 init-account
 0
 100000
-10000.0
+15300.0
 100
 1
 NIL
@@ -277,7 +287,7 @@ utility
 utility
 0
 200
-125.0
+207.94573631621398
 1
 1
 NIL
@@ -288,11 +298,11 @@ SLIDER
 50
 200
 83
-%-consumer-return
-%-consumer-return
+max-consumer-return
+max-consumer-return
 0
 1
-0.25
+0.5
 .01
 1
 NIL
@@ -307,7 +317,7 @@ turnover
 turnover
 0
 1
-0.04
+0.06
 .01
 1
 NIL
@@ -322,7 +332,7 @@ init-assets
 init-assets
 0
 1000
-0.0
+394.0
 1
 1
 NIL
@@ -337,7 +347,7 @@ consumption-rate
 consumption-rate
 0
 1
-0.06
+0.13
 .01
 1
 NIL
@@ -352,7 +362,7 @@ cost
 cost
 0
 200
-75.0
+60.61237918615524
 1
 1
 NIL
@@ -367,7 +377,7 @@ sales
 sales
 0
 1
-0.04
+0.08
 .01
 1
 NIL
@@ -382,7 +392,7 @@ production-rate
 production-rate
 0
 1
-0.06
+0.17
 .01
 1
 NIL
@@ -391,13 +401,13 @@ HORIZONTAL
 SLIDER
 215
 50
-400
+407
 83
-%-producer-return
-%-producer-return
+max-producer-return
+max-producer-return
 0
 1
-0.25
+0.5
 .01
 1
 NIL
@@ -431,7 +441,7 @@ reproduce-limit
 reproduce-limit
 100
 10000
-10000.0
+7500.0
 1
 1
 NIL
@@ -446,7 +456,7 @@ reproduce-costs
 reproduce-costs
 50
 5000
-3050.0
+3500.0
 1
 1
 NIL
@@ -552,7 +562,7 @@ account-limit
 account-limit
 10000
 1000000
-130000.0
+1000000.0
 10000
 1
 NIL
@@ -565,7 +575,7 @@ SWITCH
 203
 volatility?
 volatility?
-1
+0
 1
 -1000
 
@@ -589,7 +599,7 @@ volatility
 volatility
 0
 1
-0.14
+0.13
 .01
 1
 NIL
@@ -604,7 +614,7 @@ trend
 trend
 0
 .1
-0.01
+0.03
 .01
 1
 NIL
