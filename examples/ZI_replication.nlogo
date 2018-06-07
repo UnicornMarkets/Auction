@@ -55,11 +55,15 @@ to go
   ; first do exchange activity
   ask producers [
     ; sell into market, trading asset for cash
-    sell
+    if account < account-limit [
+      sell
+    ]
   ]
   ask consumers [
     ; buy from market, trading cash for asset
-    buy
+    if account < account-limit [
+      buy
+    ]
   ]
 
   ; clear all orders
@@ -114,19 +118,29 @@ to go
 
   if volatility? [
     ; this turns the simulation into a stochastic process
-    set utility utility + random-normal 0 (utility * volatility / 12)
-    set cost cost + random-normal 0 (cost * volatility / 12)
+    let util-vol random-normal 0 (utility * volatility / 12)
+    set utility utility + util-vol
+    let cost-vol random-normal 0 (cost * volatility / 12)
+    set cost cost + cost-vol
+    ask producers [
+      set price int (cost * (1 + percent-return))
+    ]
+    ask consumers [
+      set price int (utility / (1 + percent-return))
+    ]
   ]
 
   if trend? [
     ; this adds a slope to the underlying values
-    set utility utility * (1 + trend / 12)
-    set cost cost * (1 + trend / 12)
-    if ticks > 1800 [
-      ; weird stuff happens with exponential growth: just stop it now
-      set utility 150
-      set cost 50
-      stop
+    let trend-move (1 + trend / 12)
+    set utility utility * trend-move
+    set cost cost * trend-move
+    ; with the new utility and cost, let's adjust traders prices
+    ask producers [
+      set price int (cost * (1 + percent-return))
+    ]
+    ask consumers [
+      set price int (utility / (1 + percent-return))
     ]
   ]
 
@@ -136,7 +150,14 @@ to go
     set stop-indicator 0
   ]
 
-  if stop-indicator > 50 [
+  if stop-indicator > 100 [
+    ; utility and cost can get changed up by trend
+    if utility > 200 [
+      set utility 200
+    ]
+    if cost > 200 [
+      set cost 100
+    ]
     stop
   ]
 
