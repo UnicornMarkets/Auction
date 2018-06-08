@@ -374,7 +374,10 @@ class Market(asset: String, currency: String, world: World) {
     // clear all orders with empty list
     bidOrders = Nil
     askOrders = Nil
+  }
 
+  def resetLastTrade(): Unit = {
+    // when there is no trade set volume to 0
     lastTradeVolume = 0
   }
 
@@ -484,6 +487,8 @@ object Clear extends api.Command {
        // this procedure adds assets or money to traders according to the fills
        // and returns any assets or money that is being held until execution
        market.fillAllTraders(pss)
+     else
+       market.resetLastTrade()
      market.returnAllHoldings(pss)
      market.resetAllOrders()
    }
