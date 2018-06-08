@@ -60,7 +60,7 @@ extensions [ auction ]
         "auction:setup-market">auction:setup-market</a>
       </h3>
       <h4>
-        auction:setup-market <i>asset-name</i>
+        auction:setup-market <i>turtle</i> <i>asset-name</i> <i>currency-name</i>
       </h4>
       <p>
         Adds a single market to the simulation for a certain type of asset
@@ -71,7 +71,7 @@ extensions [ auction ]
         "auction:buy">auction:buy</a>
       </h3>
       <h4>
-        auction:buy <i>turtle</i> <i>market-type</i> <i>price</i> <i>size</i>
+        auction:buy <i>turtle</i> <i>market(turtle)</i> <i>price</i> <i>size</i>
       </h4>
       <p>
         Place a buy order in the market. Takes a turtle trading agent, a market type a price and size for the order
@@ -84,7 +84,7 @@ extensions [ auction ]
         "auction:sell">auction:sell</a>
       </h3>
       <h4>
-        auction:sell <i>turtle</i> <i>market-type</i> <i>price</i> <i>size</i>
+        auction:sell <i>turtle</i> <i>market(turtle)</i> <i>price</i> <i>size</i>
       </h4>
       <p>
         Place a sell order in the market. Takes a turtle trading agent, a market type a price and size for the order
@@ -96,7 +96,7 @@ extensions [ auction ]
         <a name="auction:clear" id="auction:clear">auction:clear</a>
       </h3>
       <h4>
-        auction:clear <i>market-type</i>
+        auction:clear <i>market(turtle)</i>
       </h4>
       <p>
         clears the auction of all orders and fills the standing orders crossing the price threshold
@@ -107,13 +107,27 @@ extensions [ auction ]
     </h2>
     <div class="dict_entry">
       <h3>
-        <a name="auction:last-trade" id="auction:last-trade">auction:last-trade</a>
+        <a name="auction:last-trade-price" id="auction:last-trade-price">auction:last-trade-price</a>
       </h3>
       <h4>
-        auction:last-trade <i>market-type</i>
+        auction:last-trade-price <i>market(turtle)</i>
       </h4>
       <p>
-        returns the last trade price and volume in a market
+        returns the last trade price in a market
+      </div>
+
+    <h2>
+      Report
+    </h2>
+    <div class="dict_entry">
+      <h3>
+        <a name="auction:last-trade-volume" id="auction:last-trade-volume">auction:last-trade-volume</a>
+      </h3>
+      <h4>
+        auction:last-trade-volume <i>market(turtle)</i>
+      </h4>
+      <p>
+        returns the last trade volume in a market
       </div>
 
     <h2>
