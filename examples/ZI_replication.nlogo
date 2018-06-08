@@ -12,26 +12,26 @@ to setup
   ca
   set stop-indicator 0
   set trade-price (cost + utility) / 2
-  create-producers 1 [
+  create-producers init-traders [
     set cash init-account
     set asset init-assets
-    set account cash + asset * trade-price
-    setxy (account * max-pxcor / (account-limit * 2))  5
+    relocate (abs random-ycor)
     set shape "dot"
-    set color red ; producers are always red
+    ; producers are always red
+    set color red
     ; we uniformly pick a percent return between 0 and the slider
     set percent-return random-float max-producer-return
     ; return = price - cost
     ; percent-return = (price - cost / cost)
     set price int (cost * (1 + percent-return))
   ]
-  create-consumers 1 [
+  create-consumers init-traders [
     set cash init-account
     set asset init-assets
-    set account cash + asset * trade-price
-    setxy (account * max-pxcor / (account-limit * 2)) -5
+    relocate (- abs random-ycor)
     set shape "dot"
-    set color blue ; consumers are always blue
+    ; consumers are always blue
+    set color blue
     ; we uniformly pick a percent return between 0 and the slider
     set percent-return random-float max-consumer-return
     ; return = utility - price
@@ -70,21 +70,10 @@ to go
   ask markets [
     ; all orders will exit market, asset and currency will trade
     auction:clear self
-    ; get the last trade price after clearing
-    set trade-price auction:last-trade-price one-of markets
-    set cleared-volume auction:last-trade-volume one-of markets
-    if trade-price = 0 [
-      ; To prevent price of 0, in the case there is no trade yet
-      set trade-price (cost + utility) / 2
-    ]
   ]
 
   ask turtles [
-    if breed != markets [
-      ; everybody should update account value
-      set account cash + asset * trade-price
-      setxy (account * max-pxcor / (account-limit * 2)) ycor
-    ]
+    relocate ycor
   ]
 
   ; now activity is economic, produce or consume
@@ -101,47 +90,23 @@ to go
     ]
   ]
 
-  ; lastly replicate this type in the market with enough account
-  if count producers <= limit-of-type [
-    ask producers [
-      replicate
-    ]
-  ]
-  if count consumers <= limit-of-type [
-    ask consumers [
-      replicate
-    ]
-  ]
-
   ; volatility and trend add price movement to our runs
   ; each tick represents a month for these parameters
 
   if volatility? [
-    ; this turns the simulation into a stochastic process
-    let util-vol random-normal 0 (utility * volatility / 12)
-    set utility utility + util-vol
-    let cost-vol random-normal 0 (cost * volatility / 12)
-    set cost cost + cost-vol
-    ask producers [
-      set price int (cost * (1 + percent-return))
-    ]
-    ask consumers [
-      set price int (utility / (1 + percent-return))
-    ]
+    make-volatility
   ]
 
   if trend? [
-    ; this adds a slope to the underlying values
-    let trend-move (1 + trend / 12)
-    set utility utility * trend-move
-    set cost cost * trend-move
-    ; with the new utility and cost, let's adjust traders prices
-    ask producers [
-      set price int (cost * (1 + percent-return))
-    ]
-    ask consumers [
-      set price int (utility / (1 + percent-return))
-    ]
+    make-trend
+  ]
+
+  ; get the last trade price and volume after clearing
+  set trade-price auction:last-trade-price one-of markets
+  set cleared-volume auction:last-trade-volume one-of markets
+  if trade-price = 0 [
+    ; To prevent price of 0, in the case there is no trade yet (for graph)
+    set trade-price (cost + utility) / 2
   ]
 
   ifelse cleared-volume <= 0 [
@@ -150,14 +115,8 @@ to go
     set stop-indicator 0
   ]
 
-  if stop-indicator > 100 [
+  if stop-indicator > 20 [
     ; utility and cost can get changed up by trend
-    if utility > 200 [
-      set utility 200
-    ]
-    if cost > 200 [
-      set cost 100
-    ]
     stop
   ]
 
@@ -166,8 +125,8 @@ to go
 end
 
 to sell ; turtle procedure, for producers
-  ;sell in market
-  let trade-size int asset * sales
+        ;sell in market
+  let trade-size int asset * producer-trade
   auction:sell self one-of markets price trade-size
   ; when markets clear for sell, they do the equivalent of this:
   ; set account account + money
@@ -175,8 +134,8 @@ to sell ; turtle procedure, for producers
 end
 
 to buy ; turtle procedure, for consumers
-  ; buy in market
-  let trade-size int cash * consumption-rate / price
+       ; buy in market
+  let trade-size int cash * consumer-trade / price
   auction:buy self one-of markets price trade-size
   ; when markets clear for buy, they do the equivalent of this:
   ; set assets assets + assets-bought
@@ -184,7 +143,7 @@ to buy ; turtle procedure, for consumers
 end
 
 to produce ; turtle procedure, for producers
-  ; produce in economy: spend cost on volume of production
+           ; produce in economy: spend cost on volume of production
   let production-cost cash * production-rate
   let assets-produced production-cost / cost
   set asset asset + assets-produced
@@ -192,34 +151,46 @@ to produce ; turtle procedure, for producers
 end
 
 to consume ; turtle procedure, for consumers
-  ; consume in economy: gain utility on volume of goods
-  let assets-consumed asset * turnover
+           ; consume in economy: gain utility on volume of goods
+  let assets-consumed asset * consumption-rate
   let asset-value assets-consumed * utility
   set cash cash + asset-value
   set asset asset - assets-consumed
 end
 
-to replicate ; turtle procedure, for producers and consumers
-  if cash > reproduce-limit [
-    set cash cash - reproduce-costs
-    hatch 1 [
-      ; give this trader some cash but no asset - net cash stays the same
-      set cash reproduce-costs
-      set asset 0
-      set account cash + asset * trade-price
-      ; create a new price for this new trader and a location
-      ifelse breed = producers [
-        set percent-return random-float max-producer-return
-        set price int (cost * (1 + percent-return))
-        setxy (account * max-pxcor / (account-limit * 2)) abs random-ycor
-      ] [
-        if breed = consumers [
-          set percent-return random-float max-consumer-return
-          set price int (utility / (1 + percent-return))
-          setxy (account * max-pxcor / (account-limit * 2)) (- abs random-ycor)
-        ]
-      ]
-    ]
+to make-volatility
+  ; this turns the simulation into a stochastic process
+  let util-vol random-normal 0 (utility * volatility / 12)
+  set utility utility + util-vol
+  let cost-vol random-normal 0 (cost * volatility / 12)
+  set cost cost + cost-vol
+  ask producers [
+    set price int (cost * (1 + percent-return))
+  ]
+  ask consumers [
+    set price int (utility / (1 + percent-return))
+  ]
+end
+
+to make-trend
+  ; this adds a slope to the underlying values
+  let trend-move (1 + trend / 12)
+  set utility utility * trend-move
+  set cost cost * trend-move
+  ; with the new utility and cost, let's adjust traders prices
+  ask producers [
+    set price int (cost * (1 + percent-return))
+  ]
+  ask consumers [
+    set price int (utility / (1 + percent-return))
+  ]
+end
+
+to relocate [ y ]; turtle procedure
+  if breed != markets [
+    ; everybody should update account value and position
+    set account cash + asset * trade-price
+    setxy (account * 4 * max-pxcor / (account-limit * 5)) y
   ]
 end
 @#$#@#$#@
@@ -251,10 +222,10 @@ ticks
 15.0
 
 BUTTON
-80
-130
-165
-163
+85
+170
+170
+203
 NIL
 setup
 NIL
@@ -268,10 +239,10 @@ NIL
 1
 
 BUTTON
-260
-130
-345
-163
+265
+170
+350
+203
 NIL
 go
 T
@@ -286,15 +257,30 @@ NIL
 
 SLIDER
 15
-10
+50
 200
-43
+83
 init-account
 init-account
 0
 100000
-15300.0
+35300.0
 100
+1
+NIL
+HORIZONTAL
+
+SLIDER
+15
+130
+200
+163
+utility
+utility
+0
+200
+393.6352231702035
+1
 1
 NIL
 HORIZONTAL
@@ -304,26 +290,11 @@ SLIDER
 90
 200
 123
-utility
-utility
-0
-200
-207.94573631621398
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-15
-50
-200
-83
 max-consumer-return
 max-consumer-return
 0
 1
-0.5
+0.8
 .01
 1
 NIL
@@ -331,11 +302,11 @@ HORIZONTAL
 
 SLIDER
 15
-210
+250
 200
-243
-turnover
-turnover
+283
+consumer-trade
+consumer-trade
 0
 1
 0.06
@@ -346,14 +317,14 @@ HORIZONTAL
 
 SLIDER
 215
-10
-400
-43
+50
+405
+83
 init-assets
 init-assets
 0
 1000
-394.0
+400.0
 1
 1
 NIL
@@ -361,9 +332,9 @@ HORIZONTAL
 
 SLIDER
 15
-170
+210
 200
-203
+243
 consumption-rate
 consumption-rate
 0
@@ -376,26 +347,26 @@ HORIZONTAL
 
 SLIDER
 215
-90
-400
-123
+130
+405
+163
 cost
 cost
 0
 200
-60.61237918615524
+100.22861914995283
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-220
-210
+215
+250
 405
-243
-sales
-sales
+283
+producer-trade
+producer-trade
 0
 1
 0.08
@@ -405,15 +376,15 @@ NIL
 HORIZONTAL
 
 SLIDER
-220
-170
+215
+210
 405
-203
+243
 production-rate
 production-rate
 0
 1
-0.17
+0.19
 .01
 1
 NIL
@@ -421,14 +392,14 @@ HORIZONTAL
 
 SLIDER
 215
-50
-407
-83
+90
+405
+123
 max-producer-return
 max-producer-return
 0
 1
-0.5
+0.7
 .01
 1
 NIL
@@ -437,7 +408,7 @@ HORIZONTAL
 PLOT
 15
 295
-280
+295
 465
 accounts
 NIL
@@ -450,44 +421,14 @@ true
 true
 "" ""
 PENS
-"produce" 1.0 0 -2674135 true "" "plot sum [cash] of producers + sum [asset] of producers * trade-price"
-"consume" 1.0 0 -13345367 true "" "plot sum [cash] of consumers + sum [asset] of consumers * trade-price"
+"produce" 1.0 0 -2674135 true "" "plot sum [account] of producers "
+"consume" 1.0 0 -13345367 true "" "plot sum [account] of consumers "
 
-SLIDER
-220
-250
+MONITOR
+320
+360
+420
 405
-283
-reproduce-limit
-reproduce-limit
-100
-10000
-7500.0
-1
-1
-NIL
-HORIZONTAL
-
-SLIDER
-15
-250
-200
-283
-reproduce-costs
-reproduce-costs
-50
-5000
-3500.0
-1
-1
-NIL
-HORIZONTAL
-
-MONITOR
-290
-295
-373
-340
 trade-price
 trade-price
 17
@@ -495,10 +436,10 @@ trade-price
 11
 
 MONITOR
-376
-296
-471
-341
+320
+415
+420
+460
 cleared-volume
 cleared-volume
 17
@@ -506,26 +447,7 @@ cleared-volume
 11
 
 PLOT
-290
-345
-470
-465
-number of agents
-NIL
-NIL
-0.0
-10.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"producers" 1.0 0 -2674135 true "" "plot count producers"
-"consumers" 1.0 0 -13345367 true "" "plot count consumers"
-
-PLOT
-480
+445
 295
 725
 465
@@ -543,25 +465,25 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot trade-price"
 
 SLIDER
-540
-170
-725
-203
-limit-of-type
-limit-of-type
+115
+10
+300
+43
+init-traders
+init-traders
 2
 1000
-155.0
+14.0
 1
 1
 NIL
 HORIZONTAL
 
 BUTTON
+175
 170
-130
-255
-163
+260
+203
 go-once
 go
 NIL
@@ -575,10 +497,10 @@ NIL
 1
 
 SLIDER
-540
-210
-725
-243
+480
+170
+665
+203
 account-limit
 account-limit
 10000
@@ -591,9 +513,9 @@ HORIZONTAL
 
 SWITCH
 420
-170
-530
-203
+210
+520
+243
 volatility?
 volatility?
 0
@@ -601,13 +523,13 @@ volatility?
 -1000
 
 SWITCH
-420
+625
 210
-530
+725
 243
 trend?
 trend?
-1
+0
 1
 -1000
 
@@ -620,7 +542,7 @@ volatility
 volatility
 0
 1
-0.13
+0.18
 .01
 1
 NIL
@@ -635,11 +557,28 @@ trend
 trend
 0
 .1
-0.03
+0.02
 .01
 1
 NIL
 HORIZONTAL
+
+BUTTON
+525
+210
+620
+243
+reset-cost-util
+set utility 120\nset cost 80
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
