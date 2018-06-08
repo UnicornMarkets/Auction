@@ -12,8 +12,8 @@ to setup
   ca
   set stop-indicator 0
   set trade-price (cost + utility) / 2
-  create-producers init-traders [
-    set cash init-account
+  create-producers init-producers [
+    set cash init-cash
     set asset init-assets
     relocate (abs random-ycor)
     set shape "dot"
@@ -25,8 +25,8 @@ to setup
     ; percent-return = (price - cost / cost)
     set price int (cost * (1 + percent-return))
   ]
-  create-consumers init-traders [
-    set cash init-account
+  create-consumers init-consumers [
+    set cash init-cash
     set asset init-assets
     relocate (- abs random-ycor)
     set shape "dot"
@@ -70,6 +70,15 @@ to go
   ask markets [
     ; all orders will exit market, asset and currency will trade
     auction:clear self
+    ; get the last trade price and volume after clearing
+    set trade-price auction:last-trade-price one-of markets
+    set cleared-volume auction:last-trade-volume one-of markets
+    if trade-price = 0 [
+      ; To prevent price of 0, in the case there is no trade yet (for graph)
+      set trade-price (cost + utility) / 2
+    ]
+    ; we set a price for market to show when toggling prices
+    set price trade-price
   ]
 
   ask turtles [
@@ -101,14 +110,6 @@ to go
     make-trend
   ]
 
-  ; get the last trade price and volume after clearing
-  set trade-price auction:last-trade-price one-of markets
-  set cleared-volume auction:last-trade-volume one-of markets
-  if trade-price = 0 [
-    ; To prevent price of 0, in the case there is no trade yet (for graph)
-    set trade-price (cost + utility) / 2
-  ]
-
   ifelse cleared-volume <= 0 [
     set stop-indicator stop-indicator + 1
   ] [
@@ -125,7 +126,7 @@ to go
 end
 
 to sell ; turtle procedure, for producers
-        ;sell in market
+  ;sell in market
   let trade-size int asset * producer-trade
   auction:sell self one-of markets price trade-size
   ; when markets clear for sell, they do the equivalent of this:
@@ -134,7 +135,7 @@ to sell ; turtle procedure, for producers
 end
 
 to buy ; turtle procedure, for consumers
-       ; buy in market
+  ; buy in market
   let trade-size int cash * consumer-trade / price
   auction:buy self one-of markets price trade-size
   ; when markets clear for buy, they do the equivalent of this:
@@ -143,7 +144,7 @@ to buy ; turtle procedure, for consumers
 end
 
 to produce ; turtle procedure, for producers
-           ; produce in economy: spend cost on volume of production
+  ; produce in economy: spend cost on volume of production
   let production-cost cash * production-rate
   let assets-produced production-cost / cost
   set asset asset + assets-produced
@@ -151,7 +152,7 @@ to produce ; turtle procedure, for producers
 end
 
 to consume ; turtle procedure, for consumers
-           ; consume in economy: gain utility on volume of goods
+  ; consume in economy: gain utility on volume of goods
   let assets-consumed asset * consumption-rate
   let asset-value assets-consumed * utility
   set cash cash + asset-value
@@ -193,6 +194,22 @@ to relocate [ y ]; turtle procedure
     setxy (account * 4 * max-pxcor / (account-limit * 5)) y
   ]
 end
+
+to-report get-price
+  report trade-price
+end
+
+to-report get-volume
+  report cleared-volume
+end
+
+to-report get-prod-accounts
+  report sum [account] of producers
+end
+
+to-report get-cons-accounts
+  report sum [account] of consumers
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 415
@@ -219,7 +236,7 @@ GRAPHICS-WINDOW
 1
 1
 ticks
-15.0
+30.0
 
 BUTTON
 85
@@ -257,14 +274,14 @@ NIL
 
 SLIDER
 15
-50
+10
 200
-83
-init-account
-init-account
+43
+init-cash
+init-cash
 0
 100000
-35300.0
+10000.0
 100
 1
 NIL
@@ -279,7 +296,7 @@ utility
 utility
 0
 200
-393.6352231702035
+120.0
 1
 1
 NIL
@@ -294,7 +311,7 @@ max-consumer-return
 max-consumer-return
 0
 1
-0.8
+0.4
 .01
 1
 NIL
@@ -317,14 +334,14 @@ HORIZONTAL
 
 SLIDER
 215
-50
+10
 405
-83
+43
 init-assets
 init-assets
 0
 1000
-400.0
+115.0
 1
 1
 NIL
@@ -339,7 +356,7 @@ consumption-rate
 consumption-rate
 0
 1
-0.13
+0.12
 .01
 1
 NIL
@@ -354,7 +371,7 @@ cost
 cost
 0
 200
-100.22861914995283
+80.0
 1
 1
 NIL
@@ -384,7 +401,7 @@ production-rate
 production-rate
 0
 1
-0.19
+0.12
 .01
 1
 NIL
@@ -399,7 +416,7 @@ max-producer-return
 max-producer-return
 0
 1
-0.7
+0.3
 .01
 1
 NIL
@@ -421,14 +438,14 @@ true
 true
 "" ""
 PENS
-"produce" 1.0 0 -2674135 true "" "plot sum [account] of producers "
-"consume" 1.0 0 -13345367 true "" "plot sum [account] of consumers "
+"producer" 1.0 0 -2674135 true "" "plot get-prod-accounts"
+"consumer" 1.0 0 -13345367 true "" "plot get-cons-accounts"
 
 MONITOR
 320
-360
+365
 420
-405
+410
 trade-price
 trade-price
 17
@@ -437,9 +454,9 @@ trade-price
 
 MONITOR
 320
-415
 420
-460
+420
+465
 cleared-volume
 cleared-volume
 17
@@ -456,8 +473,8 @@ NIL
 NIL
 0.0
 10.0
-50.0
-120.0
+75.0
+125.0
 true
 false
 "" ""
@@ -465,15 +482,15 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot trade-price"
 
 SLIDER
-115
-10
-300
-43
-init-traders
-init-traders
-2
-1000
-14.0
+15
+50
+200
+83
+init-consumers
+init-consumers
+1
+100
+20.0
 1
 1
 NIL
@@ -505,7 +522,7 @@ account-limit
 account-limit
 10000
 1000000
-1000000.0
+300000.0
 10000
 1
 NIL
@@ -518,7 +535,7 @@ SWITCH
 243
 volatility?
 volatility?
-0
+1
 1
 -1000
 
@@ -542,7 +559,7 @@ volatility
 volatility
 0
 1
-0.18
+0.02
 .01
 1
 NIL
@@ -555,10 +572,10 @@ SLIDER
 283
 trend
 trend
-0
-.1
-0.02
-.01
+-.02
+.05
+0.0
+.005
 1
 NIL
 HORIZONTAL
@@ -579,6 +596,38 @@ NIL
 NIL
 NIL
 1
+
+BUTTON
+320
+295
+420
+328
+price
+if-else label = \"\" [\n  set label price\n] [\n  set label \"\"\n]
+NIL
+1
+T
+TURTLE
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+215
+50
+405
+83
+init-producers
+init-producers
+1
+100
+20.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -602,7 +651,50 @@ The traders place their orders by price and size into the market, which clears a
 
 ## HOW TO USE IT
 
-Set the parameters of how much to trade in the in the sliders. Model will implement visuals but will not utilize locations for functional dynamics. Plotting will display the value of the accounts and assets of all producers and consumers as well as the number of producers and consumers and the trade prices.
+Set the parameters of how much to trade in the in the sliders. Model will implement visuals to show each traders account. Plotting will display the value of the accounts and assets of all producers and consumers as well as the trade prices.
+
+### ----- Agents -----
+
+**INIT-ACCOUNT:** sets the cash in all traders accounts
+
+**INIT-ASSET:** sets the asset in all traders accounts
+
+**ACCOUNT-LIMIT:** stops all activity of trader above this level
+
+### ----- Consumers -----
+
+**INIT-CONSUMERS:** The number of consumers in the model
+
+**MAX-CONSUMER-RETURN:** the highest economic return from utility the consumer could set a price
+
+**UTILITY:** the cash gained by expending one asset during consumption
+
+**CONSUMPTION-RATE:** the percent of asset to be expended each cycle (tick)
+
+**CONSUMER-TRADE:** the percent of cash to trade each cycle (tick)
+
+### ----- Producers -----
+
+**INIT-PRODUCERS:** The number of producers in the model
+
+**MAX-PRODUCER-RETURN:** the highest economic return from cost the producer could set a price
+
+**COST:** the cash spent to gain one asset during production
+
+**PRODUCTION-RATE:** the percent of cash to be spent each cycle (tick)
+
+**PRODUCER-TRADE:** the percent of asset to trade each cycle (tick)
+
+### ----- Meta -----
+
+**VOLATILITY?:** Whether to include volatility
+
+**VOLATILITY:** Measure of volatility in price. Used for the standard deviation of movement of utility and cost
+
+**TREND?:** Whether to include trend
+
+**TREND:** Measure of trend movement in price. Adjusts utility and cost each turn by a fixed percent
+
 
 ## THINGS TO NOTICE
 
@@ -616,21 +708,29 @@ The model is implementing an auction framework that can be reused and extended t
 
 ## EXTENDING THE MODEL
 
-This model can be extended to many agents with varied price and return patterns. The model could extend to demonstrate the competitive advantage of trading between networks, localities, or industries in free markets.
+A potential extension for this model would include using dimishing returns for agents to limit their activity, rather than putting a hard cap on the account size. 
+
+An expected utility and cost on which producers and consumers set prices would make it possible for money to be lost in this model.
+
+Setting cost and utility different for every trader creates a more diversified model in regards to the economic feature.
+
+The model could extend to demonstrate the competitive advantage of trading between networks, localities, or industries in free markets. Using multiple markets to unfluence one anothers cost and utility functions for price readjustment.
 
 ## NETLOGO FEATURES
 
-This model uses the auction extension, which is an implementation of a discrete time double sided batch auction. Orders are not matched but the entire market is processed together and cleared in a pool.
+This model uses the auction extension, which is an implementation of a discrete time double sided batch auction. Orders are not matched individually but the entire market is processed together and cleared in a pool.
+
+NetLogo's random-normal function is used for modeling the volatility of price moves.
 
 ## RELATED MODELS
 
-Related models include Hotelling's Law, which demonstrates game-theory in establishing markets, and bidding market, where buyers and sellers try to get the best prices in a competitive trading environment.
+Related models include **Hotelling's Law**, which demonstrates game-theory in establishing markets, and **Bidding Market**, where buyers and sellers try to get the best prices in a competitive trading environment.
 
 ## CREDITS AND REFERENCES
 
-This model is a recreation of models implemented by Unicorn Markets LLC.
+This model is a recreation of models implemented by Unicorn Markets.
 
-The code and the extension were written by Michael Tamillow with guidance from the Center for Connected Learning and Northwestern University
+The code and the extension were written by Michael Tamillow with guidance from the Center for Connected Learning and Northwestern University.
 @#$#@#$#@
 default
 true
@@ -941,6 +1041,57 @@ NetLogo 6.0.3
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="vary-cost-util" repetitions="1" sequentialRunOrder="false" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <timeLimit steps="2000"/>
+    <metric>get-price</metric>
+    <metric>get-volume</metric>
+    <metric>get-prod-accounts</metric>
+    <metric>get-cons-accounts</metric>
+    <steppedValueSet variable="init-traders" first="1" step="2" last="18"/>
+    <enumeratedValueSet variable="init-account">
+      <value value="10000"/>
+    </enumeratedValueSet>
+    <steppedValueSet variable="init-assets" first="0" step="100" last="300"/>
+    <steppedValueSet variable="utility" first="80" step="15" last="140"/>
+    <enumeratedValueSet variable="max-producer-return">
+      <value value="0.4"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="max-consumer-return">
+      <value value="0.4"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="consumption-rate">
+      <value value="0.12"/>
+    </enumeratedValueSet>
+    <steppedValueSet variable="cost" first="50" step="15" last="110"/>
+    <enumeratedValueSet variable="consumer-trade">
+      <value value="0.06"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="account-limit">
+      <value value="1000000"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="production-rate">
+      <value value="0.12"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="producer-trade">
+      <value value="0.06"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="volatility?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="volatility">
+      <value value="0.18"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="trend?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="trend">
+      <value value="0.02"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default
